@@ -39,7 +39,7 @@ runs:
 
     - name: Send SSM command - backup
       id: ssm-backup
-      uses: ./.github/workflows/aws-ssm-command.yml
+      uses: .github/workflows/aws-ssm-command.yml
       with:
         instance-id: ${{ inputs.aws-instance-id }}
         command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
@@ -49,14 +49,14 @@ runs:
 
     - name: Send SSM command - sync S3
       id: ssm-sync
-      uses: ./.github/workflows/aws-ssm-command.yml
+      uses: .github/workflows/aws-ssm-command.yml
       with:
         instance-id: ${{ inputs.aws-instance-id }}
         command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
 
     - name: Send SSM command - pnpm install
       id: ssm-pnpm-install
-      uses: ./.github/workflows/aws-ssm-command.yml
+      uses: .github/workflows/aws-ssm-command.yml
       with:
         instance-id: ${{ inputs.aws-instance-id }}
         command: "cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"
