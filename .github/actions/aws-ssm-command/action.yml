@@ -1,0 +1,20 @@
+# .github/actions/aws-ssm-command/action.yml
+name: 'AWS SSM Command'
+description: 'Send an SSM command and wait for it to finish'
+inputs:
+  aws-instance-id:
+    required: true
+    type: string
+  command:
+    required: true
+    type: string
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["${{ inputs.command }}"] --query 'Command.CommandId' --output text)
+        echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+      shell: bash
+
+    - run: bash ./wait-for-ssm-command.sh $COMMAND_ID
+      shell: bash

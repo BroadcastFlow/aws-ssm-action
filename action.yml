@@ -1,4 +1,3 @@
-# .github/workflows/aws-deployment.yml
 name: AWS Deployment
 on:
   workflow_call:
@@ -20,71 +19,61 @@ on:
       AWS_DEFAULT_REGION:
         required: true
 
-    jobs:
-      deploy:
-        runs-on: ubuntu-latest
-        environment: dev
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-        steps:
-          - name: Checkout code
-            uses: actions/checkout@v3
-            with:
-              fetch-depth: 0
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-          - name: Configure AWS credentials
-            uses: aws-actions/configure-aws-credentials@v2
-            with:
-              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-              aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-          - name: Send SSM command - backup
-            id: ssm-backup
-            run: |
-              COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar /srv/XenPipeline/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
-              echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+      - name: Send SSM command - backup
+        id: ssm-backup
+        uses: ./.github/actions/aws-ssm-command
+        with:
+          instance-id: ${{ inputs.aws-instance-id }}
+          command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar /srv/XenPipeline/${{ inputs.working-directory }}"
 
-          - name: Wait for SSM command to finish - creating backup
-            run: bash ./wait-for-ssm-command.sh $COMMAND_ID
+      - name: Sync with S3
+        run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
 
-          - name: Sync with S3
-            run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
+      - name: Send SSM command - sync S3
+        id: ssm-sync
+        uses: ./.github/actions/aws-ssm-command
+        with:
+          instance-id: ${{ inputs.aws-instance-id }}
+          command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} /srv/XenPipeline/${{ inputs.working-directory }}"
 
-          - name: Send SSM command - sync S3
-            id: ssm-sync
-            run: |
-              COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} /srv/XenPipeline/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
-              echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+      - name: Send SSM command - pnpm install
+        id: ssm-pnpm-install
+        uses: ./.github/actions/aws-ssm-command
+        with:
+          instance-id: ${{ inputs.aws-instance-id }}
+          command: "cd /srv/XenPipeline/${{ inputs.working-directory }}; pnpm install"
 
-          - name: Wait for SSM command to finish - sync S3
-            run: bash ./wait-for-ssm-command.sh $COMMAND_ID
+      - name: Send SSM command - stop pm2
+        id: ssm-stop-pm2
+        uses: ./.github/actions/aws-ssm-command
+        with:
+          instance-id: ${{ inputs.aws-instance-id }}
+          command: "systemctl stop pm2-ubuntu"
 
-          - name: Send SSM command - pnpm install
-            id: ssm-pnpm-install
-            run: |
-              COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["cd /srv/XenPipeline/${{ inputs.working-directory }}; pnpm install"] --query 'Command.CommandId' --output text)
-              echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
-          - name: Wait for SSM command to finish - pnpm install
-            run: bash ./wait-for-ssm-command.sh $COMMAND_ID
-
-          - name: Send SSM command - stop pm2
-            id: ssm-stop-pm2
-            run: |
-              COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["systemctl stop pm2-ubuntu"] --query 'Command.CommandId' --output text)
-              echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
-          - name: Wait for SSM command to finish - stop pm2
-            run: bash ./wait-for-ssm-command.sh $COMMAND_ID
-
-          - name: Send SSM command - start pm2
-            id: ssm-start-pm2
-            run: |
-              COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["systemctl start pm2-ubuntu"] --query 'Command.CommandId' --output text)
-              echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
-          - name: Wait for SSM command to finish - start pm2
-            run: bash ./wait-for-ssm-command.sh $COMMAND_ID
+      - name: Send SSM command - start pm2
+        id: ssm-start-pm2
+        uses: ./.github/actions/aws-ssm-command
+        with:
+          instance-id: ${{ inputs.aws-instance-id }}
+          command: "systemctl start pm2-ubuntu"
