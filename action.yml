@@ -13,15 +13,6 @@ inputs:
   server-base-path:
     required: true
     description: 'Server base path'
-  aws-access-key-id:
-    required: true
-    description: 'AWS Access Key ID'
-  aws-secret-access-key:
-    required: true
-    description: 'AWS Secret Access Key'
-  aws-default-region:
-    required: true
-    description: 'AWS Default Region'
   backup-path:
     required: true
     description: 'Backup path'
@@ -31,18 +22,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ inputs.aws-access-key-id }}
-        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
-        aws-region: ${{ inputs.aws-default-region }}
-
     - name: Send SSM command - backup
       id: ssm-backup
       run: |
