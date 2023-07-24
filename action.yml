@@ -1,68 +1,62 @@
-name: AWS Deployment
-on:
-  workflow_call:
-    inputs:
-      aws-instance-id:
-        required: true
-        type: string
-      s3-bucket:
-        required: true
-        type: string
-      working-directory:
-        required: true
-        type: string
-      server-base-path:
-        required: true
-        type: string
-    secrets:
-      AWS_ACCESS_KEY_ID:
-        required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
-      AWS_DEFAULT_REGION:
-        required: true
+name: 'AWS Deployment'
+description: 'Deploy changes to AWS'
+inputs:
+  aws-instance-id:
+    required: true
+    description: 'AWS Instance ID'
+  s3-bucket:
+    required: true
+    description: 'S3 Bucket'
+  working-directory:
+    required: true
+    description: 'Working directory'
+  server-base-path:
+    required: true
+    description: 'Server base path'
+  aws-access-key-id:
+    required: true
+    description: 'AWS Access Key ID'
+  aws-secret-access-key:
+    required: true
+    description: 'AWS Secret Access Key'
+  aws-default-region:
+    required: true
+    description: 'AWS Default Region'
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: dev
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-region: ${{ inputs.aws-default-region }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+    - name: Send SSM command - backup
+      id: ssm-backup
+      uses: ./.github/workflows/aws-ssm-command.yml
+      with:
+        instance-id: ${{ inputs.aws-instance-id }}
+        command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
 
-      - name: Send SSM command - backup
-        id: ssm-backup
-        uses: .github/workflows/aws-ssm-command.yml
-        with:
-          instance-id: ${{ inputs.aws-instance-id }}
-          command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
+    - name: Sync with S3
+      run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
 
-      - name: Sync with S3
-        run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
+    - name: Send SSM command - sync S3
+      id: ssm-sync
+      uses: ./.github/workflows/aws-ssm-command.yml
+      with:
+        instance-id: ${{ inputs.aws-instance-id }}
+        command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
 
-      - name: Send SSM command - sync S3
-        id: ssm-sync
-        uses: .github/workflows/aws-ssm-command.yml
-        with:
-          instance-id: ${{ inputs.aws-instance-id }}
-          command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
-
-      - name: Send SSM command - pnpm install
-        id: ssm-pnpm-install
-        uses: .github/workflows/aws-ssm-command.yml
-        with:
-          instance-id: ${{ inputs.aws-instance-id }}
-          command: "cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"
+    - name: Send SSM command - pnpm install
+      id: ssm-pnpm-install
+      uses: ./.github/workflows/aws-ssm-command.yml
+      with:
+        instance-id: ${{ inputs.aws-instance-id }}
+        command: "cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"
