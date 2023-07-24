@@ -11,6 +11,9 @@ on:
       working-directory:
         required: true
         type: string
+      server-base-path:
+        required: true
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: true
@@ -45,7 +48,7 @@ jobs:
         uses: ./.github/actions/aws-ssm-command
         with:
           instance-id: ${{ inputs.aws-instance-id }}
-          command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar /srv/XenPipeline/${{ inputs.working-directory }}"
+          command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
 
       - name: Sync with S3
         run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
@@ -55,25 +58,11 @@ jobs:
         uses: ./.github/actions/aws-ssm-command
         with:
           instance-id: ${{ inputs.aws-instance-id }}
-          command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} /srv/XenPipeline/${{ inputs.working-directory }}"
+          command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
 
       - name: Send SSM command - pnpm install
         id: ssm-pnpm-install
         uses: ./.github/actions/aws-ssm-command
         with:
           instance-id: ${{ inputs.aws-instance-id }}
-          command: "cd /srv/XenPipeline/${{ inputs.working-directory }}; pnpm install"
-
-      - name: Send SSM command - stop pm2
-        id: ssm-stop-pm2
-        uses: ./.github/actions/aws-ssm-command
-        with:
-          instance-id: ${{ inputs.aws-instance-id }}
-          command: "systemctl stop pm2-ubuntu"
-
-      - name: Send SSM command - start pm2
-        id: ssm-start-pm2
-        uses: ./.github/actions/aws-ssm-command
-        with:
-          instance-id: ${{ inputs.aws-instance-id }}
-          command: "systemctl start pm2-ubuntu"
+          command: "cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"
