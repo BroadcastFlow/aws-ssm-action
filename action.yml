@@ -22,6 +22,12 @@ inputs:
   aws-default-region:
     required: true
     description: 'AWS Default Region'
+  backup-path:
+    required: true
+    description: 'Backup path'
+  username:
+    required: true
+    description: 'Username'
 runs:
   using: "composite"
   steps:
@@ -39,24 +45,27 @@ runs:
 
     - name: Send SSM command - backup
       id: ssm-backup
-      uses: .github/workflows/aws-ssm-command.yml
-      with:
-        instance-id: ${{ inputs.aws-instance-id }}
-        command: "sudo mkdir -p /srv/backups/; sudo -u ubuntu tar -cf /srv/backups/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
+      run: |
+        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo mkdir -p ${{ inputs.backup-path }}; sudo -u ${{ inputs.username }} tar -cf ${{ inputs.backup-path }}/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
+        echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+        bash ./wait-for-ssm-command.sh $COMMAND_ID
+      shell: bash
 
     - name: Sync with S3
       run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
 
     - name: Send SSM command - sync S3
       id: ssm-sync
-      uses: .github/workflows/aws-ssm-command.yml
-      with:
-        instance-id: ${{ inputs.aws-instance-id }}
-        command: "sudo -u ubuntu aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"
+      run: |
+        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo -u ${{ inputs.username }} aws s3 sync --delete s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }} ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
+        echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+        bash ./wait-for-ssm-command.sh $COMMAND_ID
+      shell: bash
 
     - name: Send SSM command - pnpm install
       id: ssm-pnpm-install
-      uses: .github/workflows/aws-ssm-command.yml
-      with:
-        instance-id: ${{ inputs.aws-instance-id }}
-        command: "cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"
+      run: |
+        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["cd ${{ inputs.server-base-path }}/${{ inputs.working-directory }}; pnpm install"] --query 'Command.CommandId' --output text)
+        echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+        bash ./wait-for-ssm-command.sh $COMMAND_ID
+      shell: bash
