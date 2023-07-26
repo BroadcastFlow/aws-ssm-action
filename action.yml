@@ -32,7 +32,8 @@ runs:
 
     - name: Sync with S3
       run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
-
+      shell: bash
+      
     - name: Send SSM command - sync S3
       id: ssm-sync
       run: |
