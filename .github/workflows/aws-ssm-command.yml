@@ -11,12 +11,13 @@ on:
         required: true
         type: string
 jobs:
-  using: "composite"
-  steps:
-    - run: |
-        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["${{ inputs.command }}"] --query 'Command.CommandId' --output text)
-        echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-      shell: bash
+  ssm:
+    runs-on: ubuntu-latest  
+    steps:
+      - run: |
+          COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["${{ inputs.command }}"] --query 'Command.CommandId' --output text)
+          echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+        shell: bash
 
-    - run: bash ./wait-for-ssm-command.sh $COMMAND_ID
-      shell: bash
+      - run: bash ./wait-for-ssm-command.sh $COMMAND_ID
+        shell: bash
