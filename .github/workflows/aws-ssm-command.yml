@@ -1,14 +1,16 @@
 # .github/actions/aws-ssm-command/action.yml
 name: 'AWS SSM Command'
 description: 'Send an SSM command and wait for it to finish'
-inputs:
-  aws-instance-id:
-    required: true
-    type: string
-  command:
-    required: true
-    type: string
-runs:
+on:
+  workflow_call:
+    inputs:
+      aws-instance-id:
+        required: true
+        type: string
+      command:
+        required: true
+        type: string
+jobs:                           :
   using: "composite"
   steps:
     - run: |
