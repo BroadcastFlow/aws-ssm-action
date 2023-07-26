@@ -10,7 +10,7 @@ on:
       command:
         required: true
         type: string
-jobs:                           :
+jobs:
   using: "composite"
   steps:
     - run: |
