@@ -28,7 +28,7 @@ runs:
     - name: Send SSM command - backup
       id: ssm-backup
       run: |
-        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo mkdir -p ${{ inputs.backup-path }}; sudo -u ${{ inputs.username }} tar -cf ${{ inputs.backup-path }}/$(basename ${{ inputs.working-directory }})-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
+        COMMAND_ID=$(aws ssm send-command --instance-ids "${{ inputs.aws-instance-id }}" --document-name "AWS-RunShellScript" --parameters commands=["sudo mkdir -p ${{ inputs.backup-path }}; sudo -u ${{ inputs.username }} tar -cf ${{ inputs.backup-path }}/${{ inputs.working-directory }}-$(date +%Y-%m-%d_%H%M%S).tar ${{ inputs.server-base-path }}/${{ inputs.working-directory }}"] --query 'Command.CommandId' --output text)
         echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
         bash ./wait-for-ssm-command.sh $COMMAND_ID
       shell: bash
