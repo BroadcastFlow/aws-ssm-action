@@ -19,6 +19,9 @@ inputs:
   username:
     required: true
     description: 'Username'
+  code-path:
+    required: true
+    description: 'code path directory'
 runs:
   using: "composite"
   steps:
@@ -31,7 +34,7 @@ runs:
       shell: bash
 
     - name: Sync with S3
-      run: aws s3 sync --delete ./${{ inputs.working-directory }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
+      run: aws s3 sync --delete ./${{ inputs.code-path }} s3://${{ inputs.s3-bucket }}/${{ inputs.working-directory }}
       shell: bash
       
     - name: Send SSM command - sync S3
